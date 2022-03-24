@@ -36,6 +36,7 @@ fun Project.testsJar(body: Jar.() -> Unit = {}): Jar {
 
     return task<Jar>(MAGIC_DO_NOT_CHANGE_TEST_JAR_TASK_NAME) {
         dependsOn("testClasses")
+        isPreserveFileTimestamps = false
         pluginManager.withPlugin("java") {
             from(testSourceSet.output)
         }
@@ -118,6 +119,7 @@ fun Project.sourcesJar(body: Jar.() -> Unit = {}): TaskProvider<Jar> {
 
     val sourcesJar = getOrCreateTask<Jar>("sourcesJar") {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        isPreserveFileTimestamps = false
         archiveClassifier.set("sources")
 
         from(project.sources())
@@ -157,6 +159,7 @@ fun Project.javadocJar(body: Jar.() -> Unit = {}): TaskProvider<Jar> {
 
     val javadocTask = getOrCreateTask<Jar>("javadocJar") {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        isPreserveFileTimestamps = false
         archiveClassifier.set("javadoc")
         tasks.findByName("javadoc")?.let { it as Javadoc }?.takeIf { it.enabled }?.let {
             dependsOn(it)
@@ -329,6 +332,7 @@ fun Jar.setupPublicJar(
     val buildNumber = project.rootProject.extra["buildNumber"] as String
     this.archiveBaseName.set(baseName)
     this.archiveClassifier.set(classifier)
+    this.isPreserveFileTimestamps = false
     manifest.attributes.apply {
         put("Implementation-Vendor", "JetBrains")
         put("Implementation-Title", baseName.get())
