@@ -880,11 +880,11 @@ TEST(ObjectFactoryTest, CreateObject) {
     EXPECT_THAT(allocSize, testing::Gt<size_t>(type.typeInfo()->instanceSize_));
     EXPECT_THAT(allocAddress, testing::Ne(nullptr));
     EXPECT_THAT(mm::GetAllocatedHeapSize(object), allocSize);
+    EXPECT_THAT(object->type_info(), type.typeInfo());
 
     threadQueue.Publish();
 
     auto node = ObjectFactory::NodeRef::From(object);
-    EXPECT_FALSE(node.IsArray());
     EXPECT_THAT(node.GetObjHeader(), object);
     EXPECT_THAT(node.GCObjectData().flags, 42);
 
@@ -916,12 +916,12 @@ TEST(ObjectFactoryTest, CreateObjectArray) {
     EXPECT_THAT(allocSize, testing::Gt<size_t>(-theArrayTypeInfo->instanceSize_ * 3));
     EXPECT_THAT(allocAddress, testing::Ne(nullptr));
     EXPECT_THAT(mm::GetAllocatedHeapSize(array->obj()), allocSize);
+    EXPECT_THAT(array->type_info(), theArrayTypeInfo);
 
     threadQueue.Publish();
 
     auto node = ObjectFactory::NodeRef::From(array);
-    EXPECT_TRUE(node.IsArray());
-    EXPECT_THAT(node.GetArrayHeader(), array);
+    EXPECT_THAT(node.GetObjHeader()->array(), array);
     EXPECT_THAT(node.GCObjectData().flags, 42);
 
     auto iter = objectFactory.LockForIter();
@@ -952,12 +952,12 @@ TEST(ObjectFactoryTest, CreateCharArray) {
     EXPECT_THAT(allocSize, testing::Gt<size_t>(-theCharArrayTypeInfo->instanceSize_ * 3));
     EXPECT_THAT(allocAddress, testing::Ne(nullptr));
     EXPECT_THAT(mm::GetAllocatedHeapSize(array->obj()), allocSize);
+    EXPECT_THAT(array->type_info(), theCharArrayTypeInfo);
 
     threadQueue.Publish();
 
     auto node = ObjectFactory::NodeRef::From(array);
-    EXPECT_TRUE(node.IsArray());
-    EXPECT_THAT(node.GetArrayHeader(), array);
+    EXPECT_THAT(node.GetObjHeader()->array(), array);
     EXPECT_THAT(node.GCObjectData().flags, 42);
 
     auto iter = objectFactory.LockForIter();
@@ -989,7 +989,7 @@ TEST(ObjectFactoryTest, Erase) {
     {
         auto iter = objectFactory.LockForIter();
         for (auto it = iter.begin(); it != iter.end();) {
-            if (it->IsArray()) {
+            if (it->GetObjHeader()->type_info()->IsArray()) {
                 EXPECT_CALL(allocator, Free(_));
                 iter.EraseAndAdvance(it);
                 testing::Mock::VerifyAndClearExpectations(&allocator);
@@ -1003,7 +1003,7 @@ TEST(ObjectFactoryTest, Erase) {
         auto iter = objectFactory.LockForIter();
         int count = 0;
         for (auto it = iter.begin(); it != iter.end(); ++it, ++count) {
-            EXPECT_FALSE(it->IsArray());
+            EXPECT_FALSE(it->GetObjHeader()->type_info()->IsArray());
         }
         EXPECT_THAT(count, 10);
     }
@@ -1031,7 +1031,7 @@ TEST(ObjectFactoryTest, Move) {
     {
         auto iter = objectFactory.LockForIter();
         for (auto it = iter.begin(); it != iter.end();) {
-            if (it->IsArray()) {
+            if (it->GetObjHeader()->type_info()->IsArray()) {
                 iter.MoveAndAdvance(finalizerQueue, it);
             } else {
                 ++it;
@@ -1043,7 +1043,7 @@ TEST(ObjectFactoryTest, Move) {
         auto iter = objectFactory.LockForIter();
         int count = 0;
         for (auto it = iter.begin(); it != iter.end(); ++it, ++count) {
-            EXPECT_FALSE(it->IsArray());
+            EXPECT_FALSE(it->GetObjHeader()->type_info()->IsArray());
         }
         EXPECT_THAT(count, 10);
     }
@@ -1052,7 +1052,7 @@ TEST(ObjectFactoryTest, Move) {
         int count = 0;
         auto iter = finalizerQueue.IterForTests();
         for (auto it = iter.begin(); it != iter.end(); ++it, ++count) {
-            EXPECT_TRUE(it->IsArray());
+            EXPECT_TRUE(it->GetObjHeader()->type_info()->IsArray());
         }
         EXPECT_THAT(count, 10);
     }

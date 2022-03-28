@@ -184,7 +184,7 @@ public:
         };
         for (auto& finalizerQueue : finalizers_) {
             for (auto node : finalizerQueue.IterForTests()) {
-                auto *object = node->IsArray() ? node->GetArrayHeader()->obj() : node->GetObjHeader();
+                auto *object = node->GetObjHeader();
                 if (object->has_meta_object()) {
                     deallocExtraObject(object);
                 }
@@ -195,7 +195,7 @@ public:
         // TODO: Figure out a better way to clear up the stuff.
         EXPECT_CALL(finalizerHook(), Call(testing::_)).Times(testing::AnyNumber());
         for (auto node : objectFactory_.LockForIter()) {
-            auto* obj = node->IsArray() ? node->GetArrayHeader()->obj() : node->GetObjHeader();
+            auto* obj = node->GetObjHeader();
             if (auto* extraObject = mm::ExtraObjectData::Get(obj)) {
                 extraObject->ClearWeakReferenceCounter();
                 deallocExtraObject(obj);
@@ -209,7 +209,7 @@ public:
         auto finalizers = gc::Sweep<SweepTraits>(objectFactory_);
         KStdVector<ObjHeader*> objects;
         for (auto node : finalizers.IterForTests()) {
-            objects.push_back(node.IsArray() ? node.GetArrayHeader()->obj() : node.GetObjHeader());
+            objects.push_back(node.GetObjHeader());
         }
         finalizers_.push_back(std::move(finalizers));
         return objects;
@@ -218,7 +218,7 @@ public:
     KStdVector<ObjHeader*> Alive() {
         KStdVector<ObjHeader*> objects;
         for (auto node : objectFactory_.LockForIter()) {
-            objects.push_back(node.IsArray() ? node.GetArrayHeader()->obj() : node.GetObjHeader());
+            objects.push_back(node.GetObjHeader());
         }
         return objects;
     }

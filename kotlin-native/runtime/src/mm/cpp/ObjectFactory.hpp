@@ -476,23 +476,8 @@ public:
             return static_cast<HeapObjHeader*>(node_.Data())->gcData;
         }
 
-        bool IsArray() const noexcept {
-            // `HeapArrayHeader` and `HeapObjHeader` are kept compatible, so the former can
-            // be always casted to the other.
-            auto* object = &static_cast<HeapObjHeader*>(node_.Data())->object;
-            return object->type_info()->IsArray();
-        }
-
         ObjHeader* GetObjHeader() noexcept {
-            auto* object = &static_cast<HeapObjHeader*>(node_.Data())->object;
-            RuntimeAssert(!object->type_info()->IsArray(), "Must not be an array");
-            return object;
-        }
-
-        ArrayHeader* GetArrayHeader() noexcept {
-            auto* array = &static_cast<HeapArrayHeader*>(node_.Data())->array;
-            RuntimeAssert(array->type_info()->IsArray(), "Must be an array");
-            return array;
+            return &static_cast<HeapObjHeader*>(node_.Data())->object;
         }
 
         bool operator==(const NodeRef& rhs) const noexcept { return &node_ == &rhs.node_; }
@@ -648,7 +633,7 @@ public:
         // TODO: Consider running it in the destructor instead.
         void Finalize() noexcept {
             for (auto node : Iterable(*this)) {
-                RunFinalizers(node->IsArray() ? node->GetArrayHeader()->obj() : node->GetObjHeader());
+                RunFinalizers(node->GetObjHeader());
             }
         }
 
