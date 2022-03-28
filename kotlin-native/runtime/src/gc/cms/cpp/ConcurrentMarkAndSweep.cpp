@@ -39,7 +39,7 @@ struct MarkTraits {
         auto& top = queue.front();
         queue.pop_front();
         auto node = mm::ObjectFactory<gc::ConcurrentMarkAndSweep>::NodeRef::From(top);
-        return node.IsArray() ? node.GetArrayHeader()->obj() : node->GetObjHeader();
+        return node->GetObjHeader();
     }
 
     static void enqueue(MarkQueue& queue, ObjHeader* object) noexcept {

@@ -490,9 +490,7 @@ public:
         }
 
         ObjHeader* GetObjHeader() noexcept {
-            auto* object = &static_cast<HeapObjHeader*>(node_.Data())->object;
-            RuntimeAssert(!object->type_info()->IsArray(), "Must not be an array");
-            return object;
+            return &static_cast<HeapObjHeader*>(node_.Data())->object;
         }
 
         ArrayHeader* GetArrayHeader() noexcept {
