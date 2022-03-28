@@ -64,10 +64,8 @@ private fun getCpuModel(context: Context): String {
     }
 }
 
-private fun getCpuFeatures(context: Context): String {
-    val configurables: Configurables = context.config.platform.configurables
-    return configurables.targetCpuFeatures ?: ""
-}
+private fun getCpuFeatures(context: Context): String =
+        context.config.platform.configurables.targetCpuFeatures ?: ""
 
 private fun tryGetInlineThreshold(context: Context): Int? {
     val configurables: Configurables = context.config.platform.configurables
