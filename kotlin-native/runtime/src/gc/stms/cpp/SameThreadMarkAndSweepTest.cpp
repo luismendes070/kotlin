@@ -202,7 +202,7 @@ using Color = gc::SameThreadMarkAndSweep::ObjectData::Color;
 
 Color GetColor(ObjHeader* objHeader) {
     auto nodeRef = mm::ObjectFactory<gc::SameThreadMarkAndSweep>::NodeRef::From(objHeader);
-    return nodeRef.GCObjectData().color();
+    return nodeRef.ObjectData().color();
 }
 
 WeakCounter& InstallWeakCounter(mm::ThreadData& threadData, ObjHeader* objHeader, ObjHeader** location) {

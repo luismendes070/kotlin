@@ -427,21 +427,20 @@ private:
 
 } // namespace internal
 
-template <typename GC>
+template <typename Traits>
 class ObjectFactory : private Pinned {
-    using GCObjectData = typename GC::ObjectData;
-    using GCThreadData = typename GC::ThreadData;
-    using Allocator = typename GC::Allocator;
+    using ObjectData = typename Traits::ObjectData;
+    using Allocator = typename Traits::Allocator;
 
     struct HeapObjHeader {
-        GCObjectData gcData;
+        ObjectData gcData;
         alignas(kObjectAlignment) ObjHeader object;
     };
 
     // Needs to be kept compatible with `HeapObjHeader` just like `ArrayHeader` is compatible
     // with `ObjHeader`: the former can always be casted to the other.
     struct HeapArrayHeader {
-        GCObjectData gcData;
+        ObjectData gcData;
         alignas(kObjectAlignment) ArrayHeader array;
     };
 
@@ -470,7 +469,7 @@ public:
 
         NodeRef* operator->() noexcept { return this; }
 
-        GCObjectData& GCObjectData() noexcept {
+        ObjectData& ObjectData() noexcept {
             // `HeapArrayHeader` and `HeapObjHeader` are kept compatible, so the former can
             // be always casted to the other.
             return static_cast<HeapObjHeader*>(node_.Data())->gcData;
@@ -511,7 +510,7 @@ public:
             typename Storage::Producer::Iterator iterator_;
         };
 
-        ThreadQueue(ObjectFactory& owner, GCThreadData& gc) noexcept : producer_(owner.storage_, gc.CreateAllocator()) {}
+        ThreadQueue(ObjectFactory& owner, Allocator allocator) noexcept : producer_(owner.storage_, std::move(allocator)) {}
 
         static size_t ObjectAllocatedSize(const TypeInfo* typeInfo) noexcept {
             RuntimeAssert(!typeInfo->IsArray(), "Must not be an array");

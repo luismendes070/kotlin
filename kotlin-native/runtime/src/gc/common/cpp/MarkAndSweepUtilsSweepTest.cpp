@@ -44,7 +44,7 @@ test_support::TypeInfoHolder typeHolder{test_support::TypeInfoHolder::ObjectBuil
 test_support::TypeInfoHolder typeHolderWithFinalizer{test_support::TypeInfoHolder::ObjectBuilder<Payload>().addFlag(TF_HAS_FINALIZER)};
 test_support::TypeInfoHolder typeHolderWeakCounter{test_support::TypeInfoHolder::ObjectBuilder<WeakCounterPayload>()};
 
-struct GC {
+struct ObjectFactoryTraits {
     struct ObjectData {
         enum class State {
             kUnmarked,
@@ -55,15 +55,9 @@ struct GC {
     };
 
     using Allocator = gc::AlignedAllocator;
-
-    struct ThreadData {
-        void SafePointAllocation(size_t) {}
-        void OnOOM(size_t) {}
-        Allocator CreateAllocator() { return Allocator(); }
-    };
 };
 
-using ObjectFactory = mm::ObjectFactory<GC>;
+using ObjectFactory = mm::ObjectFactory<ObjectFactoryTraits>;
 using ExtraObjectsDataFactory = mm::ExtraObjectDataFactory;
 
 class Object : public test_support::Object<Payload> {
@@ -82,12 +76,12 @@ public:
         return false;
     }
 
-    void Mark() { objectData().state = GC::ObjectData::State::kMarked; }
+    void Mark() { objectData().state = ObjectFactoryTraits::ObjectData::State::kMarked; }
 
-    GC::ObjectData::State state() { return objectData().state; }
+    ObjectFactoryTraits::ObjectData::State state() { return objectData().state; }
 
 private:
-    GC::ObjectData& objectData() { return ObjectFactory::NodeRef::From(header()).GCObjectData(); }
+    ObjectFactoryTraits::ObjectData& objectData() { return ObjectFactory::NodeRef::From(header()).ObjectData(); }
 };
 
 class ObjectArray : public test_support::ObjectArray<3> {
@@ -107,12 +101,12 @@ public:
         return false;
     }
 
-    void Mark() { objectData().state = GC::ObjectData::State::kMarked; }
+    void Mark() { objectData().state = ObjectFactoryTraits::ObjectData::State::kMarked; }
 
-    GC::ObjectData::State state() { return objectData().state; }
+    ObjectFactoryTraits::ObjectData::State state() { return objectData().state; }
 
 private:
-    GC::ObjectData& objectData() { return ObjectFactory::NodeRef::From(header()).GCObjectData(); }
+    ObjectFactoryTraits::ObjectData& objectData() { return ObjectFactory::NodeRef::From(header()).ObjectData(); }
 };
 
 class CharArray : public test_support::CharArray<3> {
@@ -132,22 +126,22 @@ public:
         return false;
     }
 
-    void Mark() { objectData().state = GC::ObjectData::State::kMarked; }
+    void Mark() { objectData().state = ObjectFactoryTraits::ObjectData::State::kMarked; }
 
-    GC::ObjectData::State state() { return objectData().state; }
+    ObjectFactoryTraits::ObjectData::State state() { return objectData().state; }
 
 private:
-    GC::ObjectData& objectData() { return ObjectFactory::NodeRef::From(header()).GCObjectData(); }
+    ObjectFactoryTraits::ObjectData& objectData() { return ObjectFactory::NodeRef::From(header()).ObjectData(); }
 };
 
 using WeakCounter = test_support::Object<WeakCounterPayload>;
 
 void MarkWeakCounter(WeakCounter& counter) {
-    ObjectFactory::NodeRef::From(counter.header()).GCObjectData().state = GC::ObjectData::State::kMarked;
+    ObjectFactory::NodeRef::From(counter.header()).ObjectData().state = ObjectFactoryTraits::ObjectData::State::kMarked;
 }
 
-GC::ObjectData::State GetWeakCounterState(WeakCounter& counter) {
-    return ObjectFactory::NodeRef::From(counter.header()).GCObjectData().state;
+ObjectFactoryTraits::ObjectData::State GetWeakCounterState(WeakCounter& counter) {
+    return ObjectFactory::NodeRef::From(counter.header()).ObjectData().state;
 }
 
 struct SweepTraits {
@@ -155,19 +149,19 @@ struct SweepTraits {
     using ExtraObjectsFactory = mm::ExtraObjectDataFactory;
 
     static bool IsMarkedByExtraObject(mm::ExtraObjectData &object) noexcept {
-        auto& objectData = ObjectFactory::NodeRef::From(object.GetBaseObject()).GCObjectData();
-        return objectData.state != GC::ObjectData::State::kUnmarked;
+        auto& objectData = ObjectFactory::NodeRef::From(object.GetBaseObject()).ObjectData();
+        return objectData.state != ObjectFactoryTraits::ObjectData::State::kUnmarked;
     }
 
     static bool TryResetMark(ObjectFactory::NodeRef node) {
-        GC::ObjectData& objectData = node.GCObjectData();
+        ObjectFactoryTraits::ObjectData& objectData = node.ObjectData();
         switch (objectData.state) {
-            case GC::ObjectData::State::kUnmarked:
+            case ObjectFactoryTraits::ObjectData::State::kUnmarked:
                 return false;
-            case GC::ObjectData::State::kMarked:
-                objectData.state = GC::ObjectData::State::kMarkReset;
+            case ObjectFactoryTraits::ObjectData::State::kMarked:
+                objectData.state = ObjectFactoryTraits::ObjectData::State::kMarkReset;
                 return true;
-            case GC::ObjectData::State::kMarkReset:
+            case ObjectFactoryTraits::ObjectData::State::kMarkReset:
                 RuntimeFail("Trying to reset mark twice.");
         }
     }
@@ -273,9 +267,8 @@ private:
     // TODO: Provide a common base class for all unit tests that require memory initializtion.
     kotlin::ScopedMemoryInit memoryInit;
     FinalizerHooksTestSupport finalizerHooks_;
-    GC::ThreadData gcThreadData_;
     ObjectFactory objectFactory_;
-    ObjectFactory::ThreadQueue objectFactoryThreadQueue_{objectFactory_, gcThreadData_};
+    ObjectFactory::ThreadQueue objectFactoryThreadQueue_{objectFactory_, gc::AlignedAllocator()};
     ExtraObjectsDataFactory extraObjectFactory_;
     ExtraObjectsDataFactory::ThreadQueue extraObjectFactoryThreadQueue_{extraObjectFactory_};
     KStdVector<ObjectFactory::FinalizerQueue> finalizers_;
@@ -331,7 +324,7 @@ TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleMarkedObject) {
 
     EXPECT_THAT(finalizers, testing::UnorderedElementsAre());
     EXPECT_THAT(Alive(), testing::UnorderedElementsAre(object.header()));
-    EXPECT_THAT(object.state(), GC::ObjectData::State::kMarkReset);
+    EXPECT_THAT(object.state(), ObjectFactoryTraits::ObjectData::State::kMarkReset);
 }
 
 TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleMarkedObjectArray) {
@@ -343,7 +336,7 @@ TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleMarkedObjectArray) {
 
     EXPECT_THAT(finalizers, testing::UnorderedElementsAre());
     EXPECT_THAT(Alive(), testing::UnorderedElementsAre(array.header()));
-    EXPECT_THAT(array.state(), GC::ObjectData::State::kMarkReset);
+    EXPECT_THAT(array.state(), ObjectFactoryTraits::ObjectData::State::kMarkReset);
 }
 
 TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleMarkedCharArray) {
@@ -355,7 +348,7 @@ TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleMarkedCharArray) {
 
     EXPECT_THAT(finalizers, testing::UnorderedElementsAre());
     EXPECT_THAT(Alive(), testing::UnorderedElementsAre(array.header()));
-    EXPECT_THAT(array.state(), GC::ObjectData::State::kMarkReset);
+    EXPECT_THAT(array.state(), ObjectFactoryTraits::ObjectData::State::kMarkReset);
 }
 
 TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleObjectWithExtraData) {
@@ -441,7 +434,7 @@ TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleObjectWithFinalizerHook) {
 
     EXPECT_THAT(finalizers, testing::UnorderedElementsAre(object.header()));
     EXPECT_THAT(Alive(), testing::UnorderedElementsAre());
-    EXPECT_THAT(object.state(), GC::ObjectData::State::kUnmarked);
+    EXPECT_THAT(object.state(), ObjectFactoryTraits::ObjectData::State::kUnmarked);
 
     EXPECT_CALL(finalizerHook(), Call(object.header()));
 }
@@ -455,7 +448,7 @@ TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleMarkedObjectWithFinalizerHook) {
 
     EXPECT_THAT(finalizers, testing::UnorderedElementsAre());
     EXPECT_THAT(Alive(), testing::UnorderedElementsAre(object.header()));
-    EXPECT_THAT(object.state(), GC::ObjectData::State::kMarkReset);
+    EXPECT_THAT(object.state(), ObjectFactoryTraits::ObjectData::State::kMarkReset);
 }
 
 TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleObjectWithWeakCounter) {
@@ -502,8 +495,8 @@ TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleMarkedObjectWithWeakCounter) {
 
     EXPECT_THAT(finalizers, testing::UnorderedElementsAre());
     EXPECT_THAT(Alive(), testing::UnorderedElementsAre(object.header(), weakCounter.header()));
-    EXPECT_THAT(object.state(), GC::ObjectData::State::kMarkReset);
-    EXPECT_THAT(GetWeakCounterState(weakCounter), GC::ObjectData::State::kMarkReset);
+    EXPECT_THAT(object.state(), ObjectFactoryTraits::ObjectData::State::kMarkReset);
+    EXPECT_THAT(GetWeakCounterState(weakCounter), ObjectFactoryTraits::ObjectData::State::kMarkReset);
     EXPECT_TRUE(object.HasWeakCounter());
     EXPECT_NE(weakCounter->referred, nullptr);
 }
@@ -519,8 +512,8 @@ TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleMarkedObjectArrayWithWeakCounter) 
 
     EXPECT_THAT(finalizers, testing::UnorderedElementsAre());
     EXPECT_THAT(Alive(), testing::UnorderedElementsAre(array.header(), weakCounter.header()));
-    EXPECT_THAT(array.state(), GC::ObjectData::State::kMarkReset);
-    EXPECT_THAT(GetWeakCounterState(weakCounter), GC::ObjectData::State::kMarkReset);
+    EXPECT_THAT(array.state(), ObjectFactoryTraits::ObjectData::State::kMarkReset);
+    EXPECT_THAT(GetWeakCounterState(weakCounter), ObjectFactoryTraits::ObjectData::State::kMarkReset);
     EXPECT_TRUE(array.HasWeakCounter());
     EXPECT_NE(weakCounter->referred, nullptr);
 }
@@ -536,8 +529,8 @@ TEST_F(MarkAndSweepUtilsSweepTest, SweepSingleMarkedCharArrayWithWeakCounter) {
 
     EXPECT_THAT(finalizers, testing::UnorderedElementsAre());
     EXPECT_THAT(Alive(), testing::UnorderedElementsAre(array.header(), weakCounter.header()));
-    EXPECT_THAT(array.state(), GC::ObjectData::State::kMarkReset);
-    EXPECT_THAT(GetWeakCounterState(weakCounter), GC::ObjectData::State::kMarkReset);
+    EXPECT_THAT(array.state(), ObjectFactoryTraits::ObjectData::State::kMarkReset);
+    EXPECT_THAT(GetWeakCounterState(weakCounter), ObjectFactoryTraits::ObjectData::State::kMarkReset);
     EXPECT_TRUE(array.HasWeakCounter());
     EXPECT_NE(weakCounter->referred, nullptr);
 }

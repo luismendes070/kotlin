@@ -828,25 +828,16 @@ MockAllocator::~MockAllocator() {
 // static
 MockAllocator* GlobalMockAllocator::instance_ = nullptr;
 
-class GC {
+class ObjectFactoryTraits {
 public:
     struct ObjectData {
         uint32_t flags = 42;
     };
 
     using Allocator = GlobalMockAllocator;
-
-    class ThreadData {
-    public:
-        void SafePointAllocation(size_t size) noexcept {}
-
-        void OnOOM(size_t size) noexcept {}
-
-        Allocator CreateAllocator() noexcept { return Allocator(); }
-    };
 };
 
-using ObjectFactory = mm::ObjectFactory<GC>;
+using ObjectFactory = mm::ObjectFactory<ObjectFactoryTraits>;
 
 struct Payload {
     ObjHeader* field1;
@@ -864,9 +855,8 @@ TEST(ObjectFactoryTest, CreateObject) {
     testing::StrictMock<MockAllocator> allocator;
 
     test_support::TypeInfoHolder type{test_support::TypeInfoHolder::ObjectBuilder<Payload>()};
-    GC::ThreadData gc;
     ObjectFactory objectFactory;
-    ObjectFactory::ThreadQueue threadQueue(objectFactory, gc);
+    ObjectFactory::ThreadQueue threadQueue(objectFactory, GlobalMockAllocator());
 
     size_t allocSize = 0;
     void* allocAddress = nullptr;
@@ -886,7 +876,7 @@ TEST(ObjectFactoryTest, CreateObject) {
 
     auto node = ObjectFactory::NodeRef::From(object);
     EXPECT_THAT(node.GetObjHeader(), object);
-    EXPECT_THAT(node.GCObjectData().flags, 42);
+    EXPECT_THAT(node.ObjectData().flags, 42);
 
     auto iter = objectFactory.LockForIter();
     auto it = iter.begin();
@@ -900,9 +890,8 @@ TEST(ObjectFactoryTest, CreateObject) {
 TEST(ObjectFactoryTest, CreateObjectArray) {
     testing::StrictMock<MockAllocator> allocator;
 
-    GC::ThreadData gc;
     ObjectFactory objectFactory;
-    ObjectFactory::ThreadQueue threadQueue(objectFactory, gc);
+    ObjectFactory::ThreadQueue threadQueue(objectFactory, GlobalMockAllocator());
 
     size_t allocSize = 0;
     void* allocAddress = nullptr;
@@ -922,7 +911,7 @@ TEST(ObjectFactoryTest, CreateObjectArray) {
 
     auto node = ObjectFactory::NodeRef::From(array);
     EXPECT_THAT(node.GetObjHeader()->array(), array);
-    EXPECT_THAT(node.GCObjectData().flags, 42);
+    EXPECT_THAT(node.ObjectData().flags, 42);
 
     auto iter = objectFactory.LockForIter();
     auto it = iter.begin();
@@ -936,9 +925,8 @@ TEST(ObjectFactoryTest, CreateObjectArray) {
 TEST(ObjectFactoryTest, CreateCharArray) {
     testing::StrictMock<MockAllocator> allocator;
 
-    GC::ThreadData gc;
     ObjectFactory objectFactory;
-    ObjectFactory::ThreadQueue threadQueue(objectFactory, gc);
+    ObjectFactory::ThreadQueue threadQueue(objectFactory, GlobalMockAllocator());
 
     size_t allocSize = 0;
     void* allocAddress = nullptr;
@@ -958,7 +946,7 @@ TEST(ObjectFactoryTest, CreateCharArray) {
 
     auto node = ObjectFactory::NodeRef::From(array);
     EXPECT_THAT(node.GetObjHeader()->array(), array);
-    EXPECT_THAT(node.GCObjectData().flags, 42);
+    EXPECT_THAT(node.ObjectData().flags, 42);
 
     auto iter = objectFactory.LockForIter();
     auto it = iter.begin();
@@ -973,9 +961,8 @@ TEST(ObjectFactoryTest, Erase) {
     testing::StrictMock<MockAllocator> allocator;
 
     test_support::TypeInfoHolder objectType{test_support::TypeInfoHolder::ObjectBuilder<Payload>()};
-    GC::ThreadData gc;
     ObjectFactory objectFactory;
-    ObjectFactory::ThreadQueue threadQueue(objectFactory, gc);
+    ObjectFactory::ThreadQueue threadQueue(objectFactory, GlobalMockAllocator());
 
     EXPECT_CALL(allocator, Alloc(_, _)).Times(20);
     for (int i = 0; i < 10; ++i) {
@@ -1014,9 +1001,8 @@ TEST(ObjectFactoryTest, Move) {
     testing::StrictMock<MockAllocator> allocator;
 
     test_support::TypeInfoHolder objectType{test_support::TypeInfoHolder::ObjectBuilder<Payload>()};
-    GC::ThreadData gc;
     ObjectFactory objectFactory;
-    ObjectFactory::ThreadQueue threadQueue(objectFactory, gc);
+    ObjectFactory::ThreadQueue threadQueue(objectFactory, GlobalMockAllocator());
     ObjectFactory::FinalizerQueue finalizerQueue;
 
     EXPECT_CALL(allocator, Alloc(_, _)).Times(20);
@@ -1066,9 +1052,8 @@ TEST(ObjectFactoryTest, RunFinalizers) {
     FinalizerHooksTestSupport finalizerHooks;
 
     test_support::TypeInfoHolder objectType{test_support::TypeInfoHolder::ObjectBuilder<Payload>().addFlag(TF_HAS_FINALIZER)};
-    GC::ThreadData gc;
     ObjectFactory objectFactory;
-    ObjectFactory::ThreadQueue threadQueue(objectFactory, gc);
+    ObjectFactory::ThreadQueue threadQueue(objectFactory, GlobalMockAllocator());
     ObjectFactory::FinalizerQueue finalizerQueue;
 
     KStdVector<ObjHeader*> objects;
@@ -1111,8 +1096,7 @@ TEST(ObjectFactoryTest, ConcurrentPublish) {
     EXPECT_CALL(allocator, Alloc(_, _)).Times(kThreadCount);
     for (int i = 0; i < kThreadCount; ++i) {
         threads.emplace_back([&type, &objectFactory, &canStart, &readyCount, &expected, &expectedMutex]() {
-            GC::ThreadData gc;
-            ObjectFactory::ThreadQueue threadQueue(objectFactory, gc);
+                    ObjectFactory::ThreadQueue threadQueue(objectFactory, GlobalMockAllocator());
             auto* object = threadQueue.CreateObject(type.typeInfo());
             {
                 std::lock_guard<std::mutex> guard(expectedMutex);
